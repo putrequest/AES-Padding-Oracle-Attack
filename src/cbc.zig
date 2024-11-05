@@ -1,50 +1,60 @@
 const std = @import("std");
+const key = @import("./key.zig");
 const debug = std.debug;
 const aes = std.crypto.core.aes;
 
 const block_length = aes.AesDecryptCtx(aes.Aes128).block_length;
-const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
-const iv = [_]u8{ 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff };
+// const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
+
+const cbc_ctx = struct {
+    enc_ctx: aes.AesEncryptCtx(aes.Aes128),
+    dec_ctx: aes.AesDecryptCtx(aes.Aes128),
+};
+
+pub fn init(key_init: []u8) !cbc_ctx {
+    if (key_init != block_length) {
+        return error.LengthError;
+    }
+    const ctx = cbc_ctx{
+        aes.Aes128.initEnc(key_init),
+        aes.Aes128.initDec(key_init),
+    };
+    return ctx;
+}
 
 // Aes128-CBC BigEndian
-pub fn encrypt(dst: []u8, src: []const u8) usize {
+pub fn encrypt(dst: []u8, src: []const u8, iv: []const u8) usize {
     debug.assert(dst.len >= src.len);
-    const ctx = aes.Aes128.initEnc(key);
+    const ctx = aes.Aes128.initEnc(key.key);
     var counter: [block_length]u8 = undefined;
     @memcpy(counter[0..block_length], iv[0..block_length]);
     var i: usize = 0;
+    // CBC mode
     while (i + block_length <= src.len) : (i += block_length) {
         xor(dst[i .. i + block_length], src[i .. i + block_length], &counter);
         ctx.encrypt(dst[i .. i + block_length][0..block_length], dst[i .. i + block_length][0..block_length]);
         @memcpy(counter[0..block_length], dst[i .. i + block_length][0..block_length]);
     }
-    // Pad the message
+    // Pad the message PKCS #7
     if (i < src.len) {
         const pad_length: u8 = @truncate(block_length - (src.len % block_length));
-        std.debug.print("Pad length: {d}\n", .{pad_length});
         var pad = [_]u8{pad_length} ** block_length;
-        std.debug.print("Pad: {x}\n", .{pad});
         const src_slice = src[i..];
         @memcpy(pad[0..src_slice.len], src_slice);
-        std.debug.print("Last block: {x}\n", .{pad});
         xor(&pad, &pad, &counter);
-        std.debug.print("Last block xor: {x}\n", .{pad});
         ctx.encrypt(&pad, &pad);
-        std.debug.print("Last block enc: {x}\n", .{pad});
         @memcpy(dst[i..][0..pad.len], pad[0..block_length]);
     }
-    std.debug.print("{x}\n", .{dst[0 .. i + block_length]});
     return i + block_length;
 }
 
-pub fn decrypt(dst: []u8, src: []const u8) usize {
+pub fn decrypt(dst: []u8, src: []const u8, iv: []const u8) usize {
     debug.assert(dst.len >= src.len);
-    const ctx = aes.Aes128.initDec(key);
+    const ctx = aes.Aes128.initDec(key.key);
     var counter: [block_length]u8 = undefined;
     @memcpy(counter[0..block_length], iv[0..block_length]);
     var i: usize = 0;
     while (i + block_length <= src.len) : (i += block_length) {
-        std.debug.print("i: {d}\n", .{i});
         ctx.decrypt(dst[i .. i + block_length][0..block_length], src[i .. i + block_length][0..block_length]);
         xor(dst[i .. i + block_length], dst[i .. i + block_length], &counter);
         @memcpy(counter[0..block_length], src[i .. i + block_length][0..block_length]);
@@ -54,10 +64,7 @@ pub fn decrypt(dst: []u8, src: []const u8) usize {
         xor(dst[i..][0..block_length], dst[i..][0..block_length], &counter);
     }
     // Check padding
-    std.debug.print("Dec: {s}\n", .{dst});
-    std.debug.print("i: {d}\n", .{i});
     const pad_length: u8 = dst[i - 1];
-    std.debug.print("{x}, {x}\n", .{ dst[i - 2], dst[i - 1] });
     if (pad_length >= block_length) {
         return 1;
     }
@@ -90,10 +97,11 @@ test "xor" {
 
 test "encrypt_decrypt" {
     const plaintext = "Banana";
+    const iv = [_]u8{ 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf7, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff };
     var buffer: [16]u8 = undefined;
-    var ret = encrypt(&buffer, plaintext);
+    var ret = encrypt(&buffer, plaintext, &iv);
     try std.testing.expectEqual(16, ret);
     var decrypted: [16]u8 = undefined;
-    ret = decrypt(&decrypted, &buffer);
+    ret = decrypt(&decrypted, &buffer, &iv);
     try std.testing.expectEqualSlices(u8, plaintext, decrypted[0..plaintext.len]);
 }

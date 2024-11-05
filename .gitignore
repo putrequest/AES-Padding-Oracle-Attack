@@ -1,3 +1,4 @@
 # Directories
+.assets/
 .zig-cache/
 zig-out/
