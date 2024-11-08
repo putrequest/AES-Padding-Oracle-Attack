@@ -10,6 +10,7 @@ fn onRequest(r: zap.Request) void {
     var ciphertext: [10000]u8 = undefined;
     var buffer: [10000]u8 = undefined;
     var plaintext: [10000]u8 = undefined;
+    var len: usize = 0;
     var iv: [16]u8 = undefined;
 
     // Pre-prase query parameters
@@ -18,7 +19,7 @@ fn onRequest(r: zap.Request) void {
     // Parse Ciphertext
     if (r.getParamSlice("c")) |value| {
         std.log.info("Ciphertext: {s}", .{value});
-        parseFromHex(&ciphertext, value) catch {
+        len = parseFromHex(&ciphertext, value) catch {
             r.sendBody("Invalid ciphertext\n") catch return;
             return;
         };
@@ -51,21 +52,17 @@ fn onRequest(r: zap.Request) void {
         std.debug.print("PATH: {s}, {x}\n", .{ the_path, ciphertext[0..ret] });
     }
 
-    if (r.query) |the_query| {
-        const len: usize = the_query.len / 2;
-        std.debug.print("Parsing...\n", .{});
-        _ = parseFromHex(&ciphertext, the_query) catch return;
-        // try parseFromHex(&ciphertext, the_query);
-        std.debug.print("Parsed!\n", .{});
-        // _ = std.fmt.bufPrint(&ciphertext, "{x}", .{the_query}) catch return;
-        const ret = cbc.decrypt(&buffer, ciphertext[0..len], &iv);
-        std.debug.print("Returned decription {s} : {d}\n", .{ buffer[0..len], ret });
-        std.debug.print("QUERY: {s}\n", .{the_query});
+    if (r.query) |_| {
+        std.debug.print("The ciphertext {x}\n", .{ciphertext[0..len]});
+        const ciphertext_slice = ciphertext[0..][0..len];
+        std.debug.print("{d}: {s}\n", .{ len, ciphertext_slice });
+        const ret = cbc.decrypt(&buffer, ciphertext_slice, &iv);
+        std.debug.print("Returned decription {x} : {d}\n", .{ buffer[0..len], ret });
     }
-    r.sendBody("<html><body><h1>Hello</h1></body></html>") catch return;
+    r.sendBody("All good!\n") catch return;
 }
 
-fn parseFromHex(dst: []u8, hex_str: []const u8) !void {
+fn parseFromHex(dst: []u8, hex_str: []const u8) !usize {
     std.debug.assert(dst.len >= hex_str.len / 2);
     if (hex_str.len & 1 == 1) {
         return error.LengthError;
@@ -74,10 +71,10 @@ fn parseFromHex(dst: []u8, hex_str: []const u8) !void {
     var i: usize = 0;
     var j: usize = 0;
     while (i + 2 <= len) : (i += 2) {
-        std.debug.print("We at {d}\n", .{i});
         dst[j] = try std.fmt.parseInt(u8, hex_str[i .. i + 2][0..2], 16);
         j += 1;
     }
+    return i / 2;
 }
 
 fn parseToHex(dst: []u8, str: []const u8) !void {
@@ -89,7 +86,6 @@ fn parseToHex(dst: []u8, str: []const u8) !void {
     var i: usize = 0;
     var j: usize = 0;
     while (i + 2 <= len) : (i += 2) {
-        std.debug.print("We at {d}", .{i});
         _ = try std.fmt.bufPrint(&buffer, "{x}", .{str[j]});
         @memcpy(dst[i .. i + 1], &buffer);
         j += 1;

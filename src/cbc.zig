@@ -49,6 +49,7 @@ pub fn encrypt(dst: []u8, src: []const u8, iv: []const u8) usize {
 }
 
 pub fn decrypt(dst: []u8, src: []const u8, iv: []const u8) usize {
+    std.debug.print("{d}: {x}\n", .{ src.len, src });
     debug.assert(dst.len >= src.len);
     const ctx = aes.Aes128.initDec(key.key);
     var counter: [block_length]u8 = undefined;
@@ -100,6 +101,7 @@ test "encrypt_decrypt" {
     const iv = [_]u8{ 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf7, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff };
     var buffer: [16]u8 = undefined;
     var ret = encrypt(&buffer, plaintext, &iv);
+    std.debug.print("Ciphertext: {x}\n", .{buffer});
     try std.testing.expectEqual(16, ret);
     var decrypted: [16]u8 = undefined;
     ret = decrypt(&decrypted, &buffer, &iv);
