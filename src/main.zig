@@ -9,7 +9,7 @@ const LengthError = error{
 fn onRequest(r: zap.Request) void {
     var ciphertext: [10000]u8 = undefined;
     var buffer: [10000]u8 = undefined;
-    var plaintext: [10000]u8 = undefined;
+    // var plaintext: [10000]u8 = undefined;
     var len: usize = 0;
     var iv: [16]u8 = undefined;
 
@@ -31,33 +31,39 @@ fn onRequest(r: zap.Request) void {
     // Parse IV
     if (r.getParamSlice("iv")) |value| {
         std.log.info("Param iv: {s}", .{value});
-        if (value.len < iv.len) {
+        const value_len = value.len / 2;
+        if (value_len != iv.len) {
             r.sendBody("IV too short\n") catch return;
             return;
         }
-        @memcpy(&iv, value[0..iv.len]);
+        _ = parseFromHex(&iv, value) catch {
+            r.sendBody("Invalid IV\n") catch return;
+            return;
+        };
     } else {
         r.sendBody("No IV provided\n") catch return;
         return;
     }
 
     // Path encrypt for test purpouse
-    if (r.path) |the_path| {
-        std.log.info("Encrypting: {s}", .{the_path});
-        const ret = cbc.encrypt(&plaintext, the_path, &iv);
-        _ = parseToHex(&ciphertext, &plaintext) catch {
-            // r.sendBody("Encryption error\n") catch return;
-            // return;
-        };
-        std.debug.print("PATH: {s}, {x}\n", .{ the_path, ciphertext[0..ret] });
-    }
+    // if (r.path) |the_path| {
+    //     std.log.info("Encrypting: {s}", .{the_path});
+    //     const ret = cbc.encrypt(&plaintext, the_path, &iv);
+    //     _ = parseToHex(&ciphertext, &plaintext) catch {
+    //         r.sendBody("Encryption error\n") catch return;
+    //         return;
+    //     };
+    //     std.debug.print("PATH: {s}, {x}\n", .{ the_path, ciphertext[0..ret] });
+    // }
 
     if (r.query) |_| {
-        std.debug.print("The ciphertext {x}\n", .{ciphertext[0..len]});
         const ciphertext_slice = ciphertext[0..][0..len];
-        std.debug.print("{d}: {s}\n", .{ len, ciphertext_slice });
         const ret = cbc.decrypt(&buffer, ciphertext_slice, &iv);
-        std.debug.print("Returned decription {x} : {d}\n", .{ buffer[0..len], ret });
+        if (ret == 0) {
+            r.sendBody("Decryption error\n") catch return;
+            return;
+        }
+        std.log.info("Decrypted: {s}", .{buffer[0..ret]});
     }
     r.sendBody("All good!\n") catch return;
 }
