@@ -2,3 +2,6 @@
 .assets/
 .zig-cache/
 zig-out/
+
+# Files
+src/key.zig
