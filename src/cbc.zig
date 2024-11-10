@@ -4,7 +4,6 @@ const debug = std.debug;
 const aes = std.crypto.core.aes;
 
 const block_length = aes.AesDecryptCtx(aes.Aes128).block_length;
-// const key = [_]u8{ 0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c };
 
 const cbc_ctx = struct {
     enc_ctx: aes.AesEncryptCtx(aes.Aes128),
@@ -47,6 +46,10 @@ pub fn encrypt(dst: []u8, src: []const u8, iv: []const u8) usize {
     }
     if (src.len % block_length == 0) {
         var pad = [_]u8{block_length} ** block_length;
+        const src_slice = src[i..];
+        @memcpy(pad[0..src_slice.len], src_slice);
+        xor(&pad, &pad, &counter);
+        ctx.encrypt(&pad, &pad);
         @memcpy(dst[i..][0..block_length], pad[0..block_length]);
     }
     return i + block_length;
@@ -70,7 +73,7 @@ pub fn decrypt(dst: []u8, src: []const u8, iv: []const u8) usize {
     // Check padding
     // Return length of message if ok, otherwise 0.
     const pad_length: u8 = dst[i - 1];
-    if (pad_length >= block_length) {
+    if (pad_length > block_length) {
         return 0;
     }
     var j: usize = 0;
@@ -115,6 +118,10 @@ test "pad_block_length" {
     const plaintext = "0123456789abcdef";
     const iv = [_]u8{ 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff };
     var buffer: [32]u8 = undefined;
-    const ret = encrypt(&buffer, plaintext, &iv);
+    var ret = encrypt(&buffer, plaintext, &iv);
     try std.testing.expectEqual(32, ret);
+    var decrypted: [32]u8 = undefined;
+    ret = decrypt(&decrypted, &buffer, &iv);
+    try std.testing.expectEqual(16, ret);
+    try std.testing.expectEqualSlices(u8, plaintext, decrypted[0..ret]);
 }
