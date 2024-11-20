@@ -18,8 +18,3 @@ parameters `c` and `iv`, for example:
 ```text
 http://localhost:3000/?c=1231b03277c1fb949ddfd89e7f3fc122&iv=f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff
 ```
-
-> TODO:
->
-> - Modify the endpoint to work with POST instead of GET.
-> - Create a _Dockerfile_ and a _docker-compose_ for easy running.
