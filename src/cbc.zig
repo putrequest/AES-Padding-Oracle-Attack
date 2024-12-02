@@ -73,6 +73,11 @@ pub fn decrypt(dst: []u8, src: []const u8, iv: []const u8) usize {
     // Check padding
     // Return length of message if ok, otherwise 0.
     const pad_length: u8 = dst[i - 1];
+    
+    if (pad_length == 0) {
+        return 0;
+    }
+
     if (pad_length > block_length) {
         return 0;
     }
@@ -124,4 +129,14 @@ test "pad_block_length" {
     ret = decrypt(&decrypted, &buffer, &iv);
     try std.testing.expectEqual(16, ret);
     try std.testing.expectEqualSlices(u8, plaintext, decrypted[0..ret]);
+}
+
+test "padding_0" {
+    const plaintext = [_]u8{ 0x00 } ** 16;
+    const iv = [_]u8{ 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff };
+    var buffer: [32]u8 = undefined;
+    var ret = encrypt(&buffer, &plaintext, &iv);
+    var decrypted: [16]u8 = undefined;
+    ret = decrypt(&decrypted, buffer[0..16][0..], &iv);
+    try std.testing.expectEqual(0,ret);
 }
